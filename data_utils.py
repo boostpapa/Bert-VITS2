@@ -1,6 +1,7 @@
 import os
 import random
 import torch
+import torchaudio
 import torch.utils.data
 from tqdm import tqdm
 from loguru import logger
@@ -27,6 +28,8 @@ class TextAudioSpeakerLoader(torch.utils.data.Dataset):
         self.hop_length = hparams.hop_length
         self.win_length = hparams.win_length
         self.sampling_rate = hparams.sampling_rate
+        self.src_sampling_rate = getattr(hparams, "src_sampling_rate",
+                                         self.sampling_rate)
         self.spk_map = hparams.spk2id
         self.hparams = hparams
 
@@ -58,9 +61,7 @@ class TextAudioSpeakerLoader(torch.utils.data.Dataset):
         lengths = []
         skipped = 0
         logger.info("Init dataset...")
-        for _id, spk, language, text, phones, tone, word2ph in tqdm(
-            self.audiopaths_sid_text
-        ):
+        for _id, spk, language, text, phones, tone, word2ph in self.audiopaths_sid_text:
             audiopath = f"{_id}"
             if self.min_text_len <= len(phones) and len(phones) <= self.max_text_len:
                 phones = phones.split(" ")
@@ -69,7 +70,8 @@ class TextAudioSpeakerLoader(torch.utils.data.Dataset):
                 audiopaths_sid_text_new.append(
                     [audiopath, spk, language, text, phones, tone, word2ph]
                 )
-                lengths.append(os.path.getsize(audiopath) // (2 * self.hop_length))
+                #lengths.append(os.path.getsize(audiopath) // (2 * self.hop_length))
+                lengths.append(int(os.path.getsize(audiopath) * self.sampling_rate / self.src_sampling_rate) // (2 * self.hop_length))
             else:
                 skipped += 1
         logger.info(
@@ -94,13 +96,14 @@ class TextAudioSpeakerLoader(torch.utils.data.Dataset):
         return (phones, spec, wav, sid, tone, language, bert, ja_bert)
 
     def get_audio(self, filename):
-        audio, sampling_rate = load_wav_to_torch(filename)
+        #audio, sampling_rate = load_wav_to_torch(filename)
+        audio, sampling_rate = torchaudio.load(filename, normalize=False)
         if sampling_rate != self.sampling_rate:
-            raise ValueError(
-                "{} {} SR doesn't match target {} SR".format(
-                    filename, sampling_rate, self.sampling_rate
-                )
-            )
+            audio = audio.to(torch.float)
+            audio = torchaudio.transforms.Resample(sampling_rate,
+                                                   self.sampling_rate)(audio)
+            audio = audio.to(torch.int16)
+        audio = audio[0]  # Get the first channel
         audio_norm = audio / self.max_wav_value
         audio_norm = audio_norm.unsqueeze(0)
         spec_filename = filename.replace(".wav", ".spec.pt")

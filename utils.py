@@ -196,9 +196,14 @@ def get_hparams(init=True):
         help="JSON file for configuration",
     )
     parser.add_argument("-m", "--model", type=str, required=True, help="Model name")
+    parser.add_argument('--train_data',
+                        type=str,
+                        default=None,
+                        help='train data')
+    parser.add_argument('--val_data', type=str, default=None, help='val data')
 
     args = parser.parse_args()
-    model_dir = os.path.join("./logs", args.model)
+    model_dir = args.model
 
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
@@ -214,6 +219,10 @@ def get_hparams(init=True):
         with open(config_save_path, "r") as f:
             data = f.read()
     config = json.loads(data)
+    if args.train_data is not None:
+        config['data']['training_files'] = args.train_data
+    if args.val_data is not None:
+        config['data']['validation_files'] = args.val_data
 
     hparams = HParams(**config)
     hparams.model_dir = model_dir

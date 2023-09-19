@@ -161,6 +161,8 @@ def run():
     net_d = DDP(net_d, device_ids=[rank], find_unused_parameters=True)
     if net_dur_disc is not None:
         net_dur_disc = DDP(net_dur_disc, device_ids=[rank], find_unused_parameters=True)
+
+    dur_resume_lr = hps.train.learning_rate
     try:
         if net_dur_disc is not None:
             _, _, dur_resume_lr, epoch_str = utils.load_checkpoint(
