@@ -8,7 +8,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.cuda.amp import autocast, GradScaler
-from tqdm import tqdm
+import tqdm
 import logging
 
 logging.getLogger("numba").setLevel(logging.WARNING)
@@ -72,7 +72,7 @@ def run():
     collate_fn = TextAudioSpeakerCollate()
     train_loader = DataLoader(
         train_dataset,
-        num_workers=16,
+        num_workers=8,
         shuffle=False,
         pin_memory=True,
         collate_fn=collate_fn,
@@ -279,7 +279,7 @@ def train_and_evaluate(
         language,
         bert,
         ja_bert,
-    ) in tqdm(enumerate(train_loader)):
+    ) in enumerate(train_loader):
         if net_g.module.use_noise_scaled_mas:
             current_mas_noise_scale = (
                 net_g.module.mas_noise_scale_initial
@@ -311,17 +311,9 @@ def train_and_evaluate(
                 z_mask,
                 (z, z_p, m_p, logs_p, m_q, logs_q),
                 (hidden_x, logw, logw_),
-            ) = net_g(
-                x,
-                x_lengths,
-                spec,
-                spec_lengths,
-                speakers,
-                tone,
-                language,
-                bert,
-                ja_bert,
-            )
+            ) = net_g(x, x_lengths, spec, spec_lengths, speakers,
+                      tone, language, bert, ja_bert,)
+            
             mel = spec_to_mel_torch(
                 spec,
                 hps.data.filter_length,
