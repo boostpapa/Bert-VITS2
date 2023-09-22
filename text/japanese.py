@@ -542,7 +542,7 @@ def distribute_phone(n_phone, n_word):
     return phones_per_word
 
 
-tokenizer = AutoTokenizer.from_pretrained("./bert/bert-base-japanese-v3")
+tokenizer = AutoTokenizer.from_pretrained("/asrfs/users/wd007/asr/tools/src/opensource/bert-vits2-dev/bert/bert-base-japanese-v3")
 
 
 def g2p(norm_text):

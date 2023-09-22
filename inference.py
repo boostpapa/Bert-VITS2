@@ -146,7 +146,7 @@ def main():
     sdp_ratio = 0.2
     noise_scale = 0.667
     noise_scale_w = 0.8
-    length_scale = 1
+    length_scale = 1.1
     speaker_ids = hps.data.spk2id
     languages = ["ZH", "JP"]
     with open(args.test_file) as fin:

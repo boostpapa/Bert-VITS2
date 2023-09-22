@@ -28,24 +28,26 @@ from losses import generator_loss, discriminator_loss, feature_loss, kl_loss
 from mel_processing import mel_spectrogram_torch, spec_to_mel_torch
 from text.symbols import symbols
 
+'''
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = (
     True  # If encontered training problem,please try to disable TF32.
 )
 torch.set_float32_matmul_precision("medium")
-torch.backends.cudnn.benchmark = True
 torch.backends.cuda.sdp_kernel("flash")
 torch.backends.cuda.enable_flash_sdp(True)
 torch.backends.cuda.enable_mem_efficient_sdp(
     True
 )  # Not available if torch version is lower than 2.0
 torch.backends.cuda.enable_math_sdp(True)
+'''
+torch.backends.cudnn.benchmark = True
 global_step = 0
 
 
 def run():
     dist.init_process_group(
-        backend="gloo",
+        backend="nccl",
         init_method="env://",  # Due to some training problem,we proposed to use gloo instead of nccl.
     )  # Use torchrun instead of mp.spawn
     rank = dist.get_rank()
@@ -84,9 +86,9 @@ def run():
         eval_dataset = TextAudioSpeakerLoader(hps.data.validation_files, hps.data)
         eval_loader = DataLoader(
             eval_dataset,
-            num_workers=0,
+            num_workers=4,
             shuffle=False,
-            batch_size=1,
+            batch_size=hps.train.batch_size,
             pin_memory=True,
             drop_last=False,
             collate_fn=collate_fn,

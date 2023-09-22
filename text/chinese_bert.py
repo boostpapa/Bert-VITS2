@@ -2,7 +2,9 @@ import torch
 import sys
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 
-tokenizer = AutoTokenizer.from_pretrained("./bert/chinese-roberta-wwm-ext-large")
+ZH_BERT="/asrfs/users/wd007/asr/tools/src/opensource/bert-vits2-dev/bert/chinese-roberta-wwm-ext-large/"
+tokenizer = AutoTokenizer.from_pretrained(ZH_BERT)
+cn_bert_model = None
 
 
 def get_bert_feature(text, word2ph, device=None):
@@ -14,14 +16,16 @@ def get_bert_feature(text, word2ph, device=None):
         device = "mps"
     if not device:
         device = "cuda"
-    model = AutoModelForMaskedLM.from_pretrained(
-        "./bert/chinese-roberta-wwm-ext-large"
-    ).to(device)
+
+    global cn_bert_model
+    if cn_bert_model is None:
+        cn_bert_model = AutoModelForMaskedLM.from_pretrained(ZH_BERT).to(device)
+
     with torch.no_grad():
         inputs = tokenizer(text, return_tensors="pt")
         for i in inputs:
             inputs[i] = inputs[i].to(device)
-        res = model(**inputs, output_hidden_states=True)
+        res = cn_bert_model(**inputs, output_hidden_states=True)
         res = torch.cat(res["hidden_states"][-3:-2], -1)[0].cpu()
 
     assert len(word2ph) == len(text) + 2
