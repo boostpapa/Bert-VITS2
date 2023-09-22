@@ -6,14 +6,15 @@ from pypinyin import lazy_pinyin, Style
 
 from text.symbols import punctuation
 from text.tone_sandhi import ToneSandhi
-from tn.chinese.normalizer import Normalizer
+#from tn.chinese.normalizer import Normalizer
+from text.zh_normalization.text_normlization import TextNormalizer
 
 current_file_path = os.path.dirname(__file__)
 pinyin_to_symbol_map = {
     line.split("\t")[0]: line.strip().split("\t")[1]
     for line in open(os.path.join(current_file_path, "opencpop-strict.txt")).readlines()
 }
-an2cn_normalizer = Normalizer()
+an2cn_normalizer = TextNormalizer()
 
 import jieba.posseg as psg
 
@@ -175,7 +176,7 @@ def text_normalize(text):
     #    text = text.replace(number, cn2an.an2cn(number), 1)
     # Chinese Numerals To Arabic Numerals
     #text = cn2an.transform(text, "an2cn")
-    text = an2cn_normalizer.normalize(text)
+    text = an2cn_normalizer.normalize_sentence(text)
     text = replace_punctuation(text)
     return text
 
