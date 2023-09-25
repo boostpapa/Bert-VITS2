@@ -62,6 +62,18 @@ def run():
         utils.check_git_hash(hps.model_dir)
         writer = SummaryWriter(log_dir=hps.model_dir)
         writer_eval = SummaryWriter(log_dir=os.path.join(hps.model_dir, "eval"))
+    if (
+        "use_mel_posterior_encoder" in hps.model.keys()
+        and hps.model.use_mel_posterior_encoder is True
+    ):
+        print("Using mel posterior encoder for VITS2")
+        posterior_channels = 80  # vits2
+        hps.data.use_mel_posterior_encoder = True
+    else:
+        print("Using lin posterior encoder for VITS1")
+        posterior_channels = hps.data.filter_length // 2 + 1
+        hps.data.use_mel_posterior_encoder = False
+
     train_dataset = TextAudioSpeakerLoader(hps.data.training_files, hps.data)
     train_sampler = DistributedBucketSampler(
         train_dataset,
@@ -129,7 +141,7 @@ def run():
 
     net_g = SynthesizerTrn(
         len(symbols),
-        hps.data.filter_length // 2 + 1,
+        posterior_channels,
         hps.train.segment_size // hps.data.hop_length,
         n_speakers=hps.data.n_speakers,
         mas_noise_scale_initial=mas_noise_scale_initial,
@@ -316,14 +328,20 @@ def train_and_evaluate(
             ) = net_g(x, x_lengths, spec, spec_lengths, speakers,
                       tone, language, bert, ja_bert,)
             
-            mel = spec_to_mel_torch(
-                spec,
-                hps.data.filter_length,
-                hps.data.n_mel_channels,
-                hps.data.sampling_rate,
-                hps.data.mel_fmin,
-                hps.data.mel_fmax,
-            )
+            if (
+                hps.model.use_mel_posterior_encoder
+                or hps.data.use_mel_posterior_encoder
+            ):
+                mel = spec
+            else:
+                mel = spec_to_mel_torch(
+                    spec,
+                    hps.data.filter_length,
+                    hps.data.n_mel_channels,
+                    hps.data.sampling_rate,
+                    hps.data.mel_fmin,
+                    hps.data.mel_fmax,
+                )
             y_mel = commons.slice_segments(
                 mel, ids_slice, hps.train.segment_size // hps.data.hop_length
             )
@@ -533,14 +551,17 @@ def evaluate(hps, generator, eval_loader, writer_eval):
                 )
                 y_hat_lengths = mask.sum([1, 2]).long() * hps.data.hop_length
 
-                mel = spec_to_mel_torch(
-                    spec,
-                    hps.data.filter_length,
-                    hps.data.n_mel_channels,
-                    hps.data.sampling_rate,
-                    hps.data.mel_fmin,
-                    hps.data.mel_fmax,
-                )
+                if hps.model.use_mel_posterior_encoder or hps.data.use_mel_posterior_encoder:
+                    mel = spec
+                else:
+                    mel = spec_to_mel_torch(
+                        spec,
+                        hps.data.filter_length,
+                        hps.data.n_mel_channels,
+                        hps.data.sampling_rate,
+                        hps.data.mel_fmin,
+                        hps.data.mel_fmax,
+                    )
                 y_hat_mel = mel_spectrogram_torch(
                     y_hat.squeeze(1).float(),
                     hps.data.filter_length,
