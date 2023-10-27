@@ -24,6 +24,7 @@ from text import cleaned_text_to_sequence, get_bert
 from text.cleaner import clean_text
 import gradio as gr
 import webbrowser
+import numpy as np
 
 net_g = None
 
@@ -52,7 +53,7 @@ def get_text(text, language_str, hps):
     if language_str == "ZH":
         bert = bert
         ja_bert = torch.zeros(768, len(phone))
-    elif language_str == "JA":
+    elif language_str == "JP":
         ja_bert = bert
         bert = torch.zeros(1024, len(phone))
     else:
@@ -100,24 +101,31 @@ def infer(text, sdp_ratio, noise_scale, noise_scale_w, length_scale, sid, langua
             .numpy()
         )
         del x_tst, tones, lang_ids, bert, x_tst_lengths, speakers
+        torch.cuda.empty_cache()
         return audio
 
 
 def tts_fn(
     text, speaker, sdp_ratio, noise_scale, noise_scale_w, length_scale, language
 ):
+    slices = text.split("|")
+    audio_list = []
     with torch.no_grad():
-        audio = infer(
-            text,
-            sdp_ratio=sdp_ratio,
-            noise_scale=noise_scale,
-            noise_scale_w=noise_scale_w,
-            length_scale=length_scale,
-            sid=speaker,
-            language=language,
-        )
-        torch.cuda.empty_cache()
-    return "Success", (hps.data.sampling_rate, audio)
+        for slice in slices:
+            audio = infer(
+                slice,
+                sdp_ratio=sdp_ratio,
+                noise_scale=noise_scale,
+                noise_scale_w=noise_scale_w,
+                length_scale=length_scale,
+                sid=speaker,
+                language=language,
+            )
+            audio_list.append(audio)
+            silence = np.zeros(hps.data.sampling_rate)  # 生成1秒的静音
+            audio_list.append(silence)  # 将静音添加到列表中
+    audio_concat = np.concatenate(audio_list)
+    return "Success", (hps.data.sampling_rate, audio_concat)
 
 
 if __name__ == "__main__":

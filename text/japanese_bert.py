@@ -1,15 +1,3 @@
-import torch
-from transformers import AutoTokenizer, AutoModelForMaskedLM
-import sys
-
-JP_BERT="/asrfs/users/wd007/asr/tools/src/opensource/bert-vits2-dev/bert/bert-base-japanese-v3/"
-tokenizer = AutoTokenizer.from_pretrained(JP_BERT)
-jp_bert_model = None
-
-
-def get_bert_feature(text, word2ph, device=None):
-    if (
-        sys.platform == "darwin"
         and torch.backends.mps.is_available()
         and device == "cpu"
     ):
