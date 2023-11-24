@@ -3,14 +3,44 @@ import glob
 import argparse
 import logging
 import json
+import shutil
 import subprocess
 import numpy as np
+from huggingface_hub import hf_hub_download
 from scipy.io.wavfile import read
 import torch
 
 MATPLOTLIB_FLAG = False
 
 logger = logging.getLogger(__name__)
+
+
+def download_checkpoint(
+    dir_path, repo_config, token=None, regex="G_*.pth", mirror="openi"
+):
+    repo_id = repo_config["repo_id"]
+    f_list = glob.glob(os.path.join(dir_path, regex))
+    if f_list:
+        print("Use existed model, skip downloading.")
+        return
+    if mirror.lower() == "openi":
+        import openi
+
+        kwargs = {"token": token} if token else {}
+        openi.login(**kwargs)
+
+        model_image = repo_config["model_image"]
+        openi.model.download_model(repo_id, model_image, dir_path)
+
+        fs = glob.glob(os.path.join(dir_path, model_image, "*.pth"))
+        for file in fs:
+            shutil.move(file, dir_path)
+        shutil.rmtree(os.path.join(dir_path, model_image))
+    else:
+        for file in ["DUR_0.pth", "D_0.pth", "G_0.pth"]:
+            hf_hub_download(
+                repo_id, file, local_dir=dir_path, local_dir_use_symlinks=False
+            )
 
 
 def load_checkpoint(checkpoint_path, model, optimizer=None, skip_optimizer=False):
@@ -211,12 +241,12 @@ def get_hparams(init=True):
     config_path = args.config
     config_save_path = os.path.join(model_dir, "config.json")
     if init:
-        with open(config_path, "r") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             data = f.read()
-        with open(config_save_path, "w") as f:
+        with open(config_save_path, "w", encoding="utf-8") as f:
             f.write(data)
     else:
-        with open(config_save_path, "r") as f:
+        with open(config_save_path, "r", vencoding="utf-8") as f:
             data = f.read()
     config = json.loads(data)
     if args.train_data is not None:
@@ -286,6 +316,7 @@ def get_hparams_from_dir(model_dir):
 
 
 def get_hparams_from_file(config_path):
+    # print("config_path: ", config_path)
     with open(config_path, "r", encoding="utf-8") as f:
         data = f.read()
     config = json.loads(data)
