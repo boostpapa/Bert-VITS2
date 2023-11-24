@@ -5,6 +5,7 @@ import torch
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+import torch.multiprocessing as mp
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.cuda.amp import autocast, GradScaler
@@ -45,16 +46,26 @@ torch.backends.cudnn.benchmark = True
 global_step = 0
 
 
-def run():
-    dist.init_process_group(
-        backend="nccl",
-        init_method="env://",  # Due to some training problem,we proposed to use gloo instead of nccl.
-    )  # Use torchrun instead of mp.spawn
-    rank = dist.get_rank()
-    n_gpus = dist.get_world_size()
+def main():
+    """Assume Single Node Multi GPUs Training Only"""
+    assert torch.cuda.is_available(), "CPU training is not allowed."
+
+    n_gpus = torch.cuda.device_count()
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "6061"
+
     hps = utils.get_hparams()
-    torch.manual_seed(hps.train.seed)
-    torch.cuda.set_device(rank)
+    mp.spawn(
+        run,
+        nprocs=n_gpus,
+        args=(
+            n_gpus,
+            hps,
+        ),
+    )
+
+
+def run(rank, n_gpus, hps):
     global global_step
     if rank == 0:
         logger = utils.get_logger(hps.model_dir)
@@ -62,18 +73,12 @@ def run():
         utils.check_git_hash(hps.model_dir)
         writer = SummaryWriter(log_dir=hps.model_dir)
         writer_eval = SummaryWriter(log_dir=os.path.join(hps.model_dir, "eval"))
-    if (
-        "use_mel_posterior_encoder" in hps.model.keys()
-        and hps.model.use_mel_posterior_encoder is True
-    ):
-        print("Using mel posterior encoder for VITS2")
-        posterior_channels = 80  # vits2
-        hps.data.use_mel_posterior_encoder = True
-    else:
-        print("Using lin posterior encoder for VITS1")
-        posterior_channels = hps.data.filter_length // 2 + 1
-        hps.data.use_mel_posterior_encoder = False
 
+    dist.init_process_group(
+        backend="nccl", init_method="env://", world_size=n_gpus, rank=rank
+    )
+    torch.manual_seed(hps.train.seed)
+    torch.cuda.set_device(rank)
     train_dataset = TextAudioSpeakerLoader(hps.data.training_files, hps.data)
     train_sampler = DistributedBucketSampler(
         train_dataset,
@@ -141,7 +146,7 @@ def run():
 
     net_g = SynthesizerTrn(
         len(symbols),
-        posterior_channels,
+        hps.data.filter_length // 2 + 1,
         hps.train.segment_size // hps.data.hop_length,
         n_speakers=hps.data.n_speakers,
         mas_noise_scale_initial=mas_noise_scale_initial,
@@ -175,13 +180,6 @@ def run():
     net_d = DDP(net_d, device_ids=[rank], find_unused_parameters=True)
     if net_dur_disc is not None:
         net_dur_disc = DDP(net_dur_disc, device_ids=[rank], find_unused_parameters=True)
-
-    num_g_params = sum(p.numel() for p in net_g.parameters())
-    print('the number of net_g params: {:,d}'.format(num_g_params))
-    num_d_params = sum(p.numel() for p in net_d.parameters())
-    print('the number of net_d params: {:,d}'.format(num_d_params))
-    num_dur_params = sum(p.numel() for p in net_dur_disc.parameters())
-    print('the number of net_dur_disc params: {:,d}'.format(num_dur_params))
 
     dur_resume_lr = hps.train.learning_rate
     try:
@@ -335,20 +333,14 @@ def train_and_evaluate(
             ) = net_g(x, x_lengths, spec, spec_lengths, speakers,
                       tone, language, bert, ja_bert,)
             
-            if (
-                hps.model.use_mel_posterior_encoder
-                or hps.data.use_mel_posterior_encoder
-            ):
-                mel = spec
-            else:
-                mel = spec_to_mel_torch(
-                    spec,
-                    hps.data.filter_length,
-                    hps.data.n_mel_channels,
-                    hps.data.sampling_rate,
-                    hps.data.mel_fmin,
-                    hps.data.mel_fmax,
-                )
+            mel = spec_to_mel_torch(
+                spec,
+                hps.data.filter_length,
+                hps.data.n_mel_channels,
+                hps.data.sampling_rate,
+                hps.data.mel_fmin,
+                hps.data.mel_fmax,
+            )
             y_mel = commons.slice_segments(
                 mel, ids_slice, hps.train.segment_size // hps.data.hop_length
             )
@@ -558,17 +550,14 @@ def evaluate(hps, generator, eval_loader, writer_eval):
                 )
                 y_hat_lengths = mask.sum([1, 2]).long() * hps.data.hop_length
 
-                if hps.model.use_mel_posterior_encoder or hps.data.use_mel_posterior_encoder:
-                    mel = spec
-                else:
-                    mel = spec_to_mel_torch(
-                        spec,
-                        hps.data.filter_length,
-                        hps.data.n_mel_channels,
-                        hps.data.sampling_rate,
-                        hps.data.mel_fmin,
-                        hps.data.mel_fmax,
-                    )
+                mel = spec_to_mel_torch(
+                    spec,
+                    hps.data.filter_length,
+                    hps.data.n_mel_channels,
+                    hps.data.sampling_rate,
+                    hps.data.mel_fmin,
+                    hps.data.mel_fmax,
+                )
                 y_hat_mel = mel_spectrogram_torch(
                     y_hat.squeeze(1).float(),
                     hps.data.filter_length,
@@ -613,4 +602,4 @@ def evaluate(hps, generator, eval_loader, writer_eval):
 
 
 if __name__ == "__main__":
-    run()
+    main()
