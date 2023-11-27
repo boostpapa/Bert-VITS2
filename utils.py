@@ -9,10 +9,29 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 from scipy.io.wavfile import read
 import torch
+import re
 
 MATPLOTLIB_FLAG = False
 
 logger = logging.getLogger(__name__)
+
+
+def download_emo_models(mirror, repo_id, model_name):
+    if mirror == "openi":
+        import openi
+
+        openi.model.download_model(
+            "Stardust_minus/Bert-VITS2",
+            repo_id.split("/")[-1],
+            "./emotional",
+        )
+    else:
+        hf_hub_download(
+            repo_id,
+            "pytorch_model.bin",
+            local_dir=model_name,
+            local_dir_use_symlinks=False,
+        )
 
 
 def download_checkpoint(
@@ -395,3 +414,54 @@ class HParams:
 
     def __repr__(self):
         return self.__dict__.__repr__()
+
+
+def load_model(model_path, config_path):
+    hps = get_hparams_from_file(config_path)
+    net = SynthesizerTrn(
+        # len(symbols),
+        108,
+        hps.data.filter_length // 2 + 1,
+        hps.train.segment_size // hps.data.hop_length,
+        n_speakers=hps.data.n_speakers,
+        **hps.model,
+    ).to("cpu")
+    _ = net.eval()
+    _ = load_checkpoint(model_path, net, None, skip_optimizer=True)
+    return net
+
+
+def mix_model(
+    network1, network2, output_path, voice_ratio=(0.5, 0.5), tone_ratio=(0.5, 0.5)
+):
+    if hasattr(network1, "module"):
+        state_dict1 = network1.module.state_dict()
+        state_dict2 = network2.module.state_dict()
+    else:
+        state_dict1 = network1.state_dict()
+        state_dict2 = network2.state_dict()
+    for k in state_dict1.keys():
+        if k not in state_dict2.keys():
+            continue
+        if "enc_p" in k:
+            state_dict1[k] = (
+                state_dict1[k].clone() * tone_ratio[0]
+                + state_dict2[k].clone() * tone_ratio[1]
+            )
+        else:
+            state_dict1[k] = (
+                state_dict1[k].clone() * voice_ratio[0]
+                + state_dict2[k].clone() * voice_ratio[1]
+            )
+    for k in state_dict2.keys():
+        if k not in state_dict1.keys():
+            state_dict1[k] = state_dict2[k].clone()
+    torch.save(
+        {"model": state_dict1, "iteration": 0, "optimizer": None, "learning_rate": 0},
+        output_path,
+    )
+
+
+def get_steps(model_path):
+    matches = re.findall(r"\d+", model_path)
+    return matches[-1] if matches else None
