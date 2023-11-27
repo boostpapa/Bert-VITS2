@@ -311,6 +311,31 @@ def text_normalize(text):
     return text
 
 
+def g2p_w(word):
+    phones = []
+    tones = []
+    word2ph = []
+    if word.upper() in eng_dict:
+        phns, tns = refine_syllables(eng_dict[word.upper()])
+        phones += phns
+        tones += tns
+        word2ph.append(len(phns))
+    else:
+        phone_list = list(filter(lambda p: p != " ", _g2p(word)))
+        for ph in phone_list:
+            if ph in arpa:
+                ph, tn = refine_ph(ph)
+                phones.append(ph)
+                tones.append(tn)
+            else:
+                phones.append(ph)
+                tones.append(0)
+        word2ph.append(len(phone_list))
+
+    phones = [post_replace_ph(i) for i in phones]
+    return phones, tones, word2ph
+
+
 def g2p(text):
     phones = []
     tones = []
