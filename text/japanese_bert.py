@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-=======
 import sys
 
 import torch
@@ -19,25 +17,12 @@ def get_bert_feature(text, word2ph, device=config.bert_gen_config.device):
     text = "".join(text2sep_kata(text)[0])
     if (
         sys.platform == "darwin"
->>>>>>> upstream/master
         and torch.backends.mps.is_available()
         and device == "cpu"
     ):
         device = "mps"
     if not device:
         device = "cuda"
-<<<<<<< HEAD
-
-    global jp_bert_model
-    if jp_bert_model is None:
-        jp_bert_model = AutoModelForMaskedLM.from_pretrained(ZH_BERT).to(device)
-
-    with torch.no_grad():
-        inputs = tokenizer(text, return_tensors="pt")
-        for i in inputs:
-            inputs[i] = inputs[i].to(device)
-        res = jp_bert_model(**inputs, output_hidden_states=True)
-=======
     if device not in models.keys():
         models[device] = AutoModelForMaskedLM.from_pretrained(LOCAL_PATH).to(device)
     with torch.no_grad():
@@ -45,7 +30,6 @@ def get_bert_feature(text, word2ph, device=config.bert_gen_config.device):
         for i in inputs:
             inputs[i] = inputs[i].to(device)
         res = models[device](**inputs, output_hidden_states=True)
->>>>>>> upstream/master
         res = torch.cat(res["hidden_states"][-3:-2], -1)[0].cpu()
 
     assert len(word2ph) == len(text) + 2
