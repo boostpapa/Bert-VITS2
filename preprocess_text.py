@@ -8,7 +8,8 @@ from tqdm import tqdm
 import click
 from text.cleaner import clean_text
 from config import config
-from infer import latest_version
+#from infer import latest_version
+latest_version = "2.1"
 
 preprocess_text_config = config.preprocess_text_config
 

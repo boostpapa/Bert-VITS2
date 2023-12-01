@@ -7,6 +7,7 @@ from config import config
 from text.japanese import text2sep_kata
 
 LOCAL_PATH = "./bert/deberta-v2-large-japanese-char-wwm"
+LOCAL_PATH = "/asrfs/users/wd007/asr/tools/src/opensource/bert-vits2-dev/bert/deberta-v2-large-japanese"
 
 tokenizer = AutoTokenizer.from_pretrained(LOCAL_PATH)
 

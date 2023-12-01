@@ -6,7 +6,7 @@ from transformers import DebertaV2Model, DebertaV2Tokenizer
 from config import config
 
 
-LOCAL_PATH = "./bert/deberta-v3-large"
+LOCAL_PATH = "/asrfs/users/wd007/asr/tools/src/opensource/bert-vits2-dev/bert/deberta-v3-large"
 
 tokenizer = DebertaV2Tokenizer.from_pretrained(LOCAL_PATH)
 

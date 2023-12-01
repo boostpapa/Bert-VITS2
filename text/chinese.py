@@ -115,6 +115,49 @@ def _get_initials_finals(word):
     return initials, finals
 
 
+def _is_all_chinese(strs):
+    for _char in strs:
+        if not '\u4e00' <= _char <= '\u9fa5':
+            return False
+    return True
+
+
+def _is_all_punc(strs):
+    punc = "".join(punctuation)
+    for c in strs:
+        if not c in punc:
+            return False
+    return True
+
+
+def _split_cn_en(str):
+    english = 'abcdefghijklmnopqrstuvwxyz0123456789'
+    output = []
+    buffer = ''
+    for s in str:
+        if s in english or s in english.upper(): 
+            buffer += s
+        else:
+            if buffer: output.append(buffer)
+            buffer = ''
+            s = s.strip()
+            if s: output.append(s)
+    if buffer: output.append(buffer)
+    return output
+
+
+def split_cn_en(seg_cut):
+    segs = []
+    for seg in seg_cut:
+        if _is_all_chinese(seg[0]) or seg[0].encode('utf-8').isalpha() or _is_all_punc(seg[0]): 
+            segs.append(seg)
+            continue
+        lsegs = _split_cn_en(seg[0])
+        for s in lsegs:
+            segs.append([s, seg[1]])
+    return segs
+         
+        
 def _g2p(segments):
     phones_list = []
     tones_list = []
@@ -126,6 +169,7 @@ def _g2p(segments):
         initials = []
         finals = []
         seg_cut = tone_modifier.pre_merge_for_modify(seg_cut)
+        seg_cut = split_cn_en(seg_cut)
         for word, pos in seg_cut:
             #print(word, pos)
             if word == " ":
@@ -136,11 +180,6 @@ def _g2p(segments):
                 tones_list += tones_en
                 word2ph += word2ph_en
                 continue
-
-            w1 = re.sub("[a-zA-Z]+", "", word)
-            if w1 != word:
-                print("Warning: clear {} to {} in {}".format(word, w1, seg)) 
-                word = w1
 
             sub_initials, sub_finals = _get_initials_finals(word)
             sub_finals = tone_modifier.modified_tone(word, pos, sub_finals)
@@ -229,11 +268,11 @@ if __name__ == "__main__":
 
     text = "可我 一问 ，这 玩意儿 并不 靠谱 。"
     text = "啊！但是《原神》是由,米哈\游自主，  [研发]的一款全.新开放世界.冒险游戏"
-    text = "我是 善良 活泼 、好奇心 旺盛的 B型血 "
     text = "瓦拉德 怀疑 此案是 “内鬼 ”所为 "
     text = "其中 ，福州 居于 榜首 。"
     text = "此次 重庆 打黑 审判 ，也已 进入 “扫尾” 阶段 。"
     text = "G P 是吧U显卡 RTX GPU 4080, 啊！但是《原神》是由,米哈\游自主，  … 猪头- !?[研发]的一款全.新开放世界.冒险游戏"
+    text = "我是 善良 活泼 、好奇心 旺盛的 B型血 "
     text = text_normalize(text)
     print(text)
     phones, tones, word2ph = g2p(text)

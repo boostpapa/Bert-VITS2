@@ -9,7 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.cuda.amp import autocast, GradScaler
-import tqdm
+from tqdm import tqdm
 import logging
 from config import config
 import argparse
@@ -98,7 +98,8 @@ def run():
         help="数据集文件夹路径，请注意，数据不再默认放在/logs文件夹下。如果需要用命令行配置，请声明相对于根目录的路径",
         default=config.dataset_path,
     )
-    args = parser.parse_args()
+    #args = parser.parse_args()
+    args, _ = parser.parse_known_args()
     model_dir = os.path.join(args.model, config.train_ms_config.model)
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
@@ -291,13 +292,16 @@ def run():
                 optim_dur_disc.param_groups[0]["initial_lr"] = dur_resume_lr
 
         epoch_str = max(epoch_str, 1)
-        # global_step = (epoch_str - 1) * len(train_loader)
-        global_step = int(
-            utils.get_steps(utils.latest_checkpoint_path(hps.model_dir, "G_*.pth"))
-        )
-        print(
-            f"******************检测到模型存在，epoch为 {epoch_str}，gloabl step为 {global_step}*********************"
-        )
+        latest_checkpoint_path = utils.latest_checkpoint_path(hps.model_dir, "G_*.pth")
+        if latest_checkpoint_path != "":
+            global_step = int(
+                utils.get_steps(latest_checkpoint_path)
+            )
+            print(
+                f"******************检测到模型存在 {latest_checkpoint_path}，epoch为 {epoch_str}，gloabl step为 {global_step}*********************"
+            )
+        else:
+            global_step = (epoch_str - 1) * len(train_loader)
     except Exception as e:
         print(e)
         epoch_str = 1
@@ -396,7 +400,7 @@ def train_and_evaluate(
         ja_bert,
         en_bert,
         emo,
-    ) in tqdm(enumerate(train_loader)):
+    ) in enumerate(train_loader):
         if net_g.module.use_noise_scaled_mas:
             current_mas_noise_scale = (
                 net_g.module.mas_noise_scale_initial
@@ -418,7 +422,7 @@ def train_and_evaluate(
         bert = bert.cuda(local_rank, non_blocking=True)
         ja_bert = ja_bert.cuda(local_rank, non_blocking=True)
         en_bert = en_bert.cuda(local_rank, non_blocking=True)
-        emo = emo.cuda(local_rank, non_blocking=True)
+        emo = None if emo is None else emo.cuda(local_rank, non_blocking=True)
 
         with autocast(enabled=hps.train.fp16_run):
             (
@@ -658,7 +662,7 @@ def evaluate(hps, generator, eval_loader, writer_eval):
             en_bert = en_bert.cuda()
             tone = tone.cuda()
             language = language.cuda()
-            emo = emo.cuda()
+            emo = None if emo is None else emo.cuda()
             for use_sdp in [True, False]:
                 y_hat, attn, mask, *_ = generator.module.infer(
                     x,

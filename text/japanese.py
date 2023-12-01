@@ -342,7 +342,8 @@ def handle_long(sep_phonemes):
     return sep_phonemes
 
 
-tokenizer = AutoTokenizer.from_pretrained("./bert/deberta-v2-large-japanese-char-wwm")
+#tokenizer = AutoTokenizer.from_pretrained("/asrfs/users/wd007/asr/tools/src/opensource/bert-vits2-dev/bert/deberta-v2-large-japanese-char-wwm")
+tokenizer = AutoTokenizer.from_pretrained("/asrfs/users/wd007/asr/tools/src/opensource/bert-vits2-dev/bert/deberta-v2-large-japanese")
 
 
 def align_tones(phones, tones):

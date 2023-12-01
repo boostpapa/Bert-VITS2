@@ -49,4 +49,4 @@ def check_bert_models():
             _check_bert(v["repo_id"], v["files"], local_path)
 
 
-check_bert_models()
+#check_bert_models()
