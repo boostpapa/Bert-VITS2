@@ -73,7 +73,6 @@ def run():
     dist.init_process_group(
         backend=backend,
         init_method="env://",  # If Windows,switch to gloo backend.
-        timeout=datetime.timedelta(seconds=300),
     )  # Use torchrun instead of mp.spawn
     rank = dist.get_rank()
     local_rank = int(os.environ["LOCAL_RANK"])
@@ -250,12 +249,16 @@ def run():
             mirror=config.mirror,
         )
 
-    num_g_params = sum(p.numel() for p in net_g.parameters())
-    print('the number of net_g params: {:,d}'.format(num_g_params))
-    num_d_params = sum(p.numel() for p in net_d.parameters())
-    print('the number of net_d params: {:,d}'.format(num_d_params))
-    num_dur_params = sum(p.numel() for p in net_dur_disc.parameters())
-    print('the number of net_dur_disc params: {:,d}'.format(num_dur_params))
+    if local_rank == 0:
+        print(net_g)
+        num_g_params = sum(p.numel() for p in net_g.parameters())
+        print('the number of net_g params: {:,d}'.format(num_g_params))
+        print(net_d)
+        num_d_params = sum(p.numel() for p in net_d.parameters())
+        print('the number of net_d params: {:,d}'.format(num_d_params))
+        print(net_dur_disc)
+        num_dur_params = sum(p.numel() for p in net_dur_disc.parameters())
+        print('the number of net_dur_disc params: {:,d}'.format(num_dur_params))
 
     dur_resume_lr = hps.train.learning_rate
     try:
@@ -399,7 +402,6 @@ def train_and_evaluate(
         bert,
         ja_bert,
         en_bert,
-        emo,
     ) in enumerate(train_loader):
         if net_g.module.use_noise_scaled_mas:
             current_mas_noise_scale = (
@@ -422,7 +424,6 @@ def train_and_evaluate(
         bert = bert.cuda(local_rank, non_blocking=True)
         ja_bert = ja_bert.cuda(local_rank, non_blocking=True)
         en_bert = en_bert.cuda(local_rank, non_blocking=True)
-        emo = None if emo is None else emo.cuda(local_rank, non_blocking=True)
 
         with autocast(enabled=hps.train.fp16_run):
             (
@@ -434,7 +435,6 @@ def train_and_evaluate(
                 z_mask,
                 (z, z_p, m_p, logs_p, m_q, logs_q),
                 (hidden_x, logw, logw_),
-                loss_commit,
             ) = net_g(
                 x,
                 x_lengths,
@@ -446,7 +446,6 @@ def train_and_evaluate(
                 bert,
                 ja_bert,
                 en_bert,
-                emo,
             )
             
             if (
@@ -525,7 +524,7 @@ def train_and_evaluate(
                 loss_fm = feature_loss(fmap_r, fmap_g)
                 loss_gen, losses_gen = generator_loss(y_d_hat_g)
                 loss_gen_all = (
-                    loss_gen + loss_fm + loss_mel + loss_dur + loss_kl + loss_commit
+                    loss_gen + loss_fm + loss_mel + loss_dur + loss_kl
                 )
                 if net_dur_disc is not None:
                     loss_dur_gen, losses_dur_gen = generator_loss(y_dur_hat_g)
@@ -651,7 +650,6 @@ def evaluate(hps, generator, eval_loader, writer_eval):
             bert,
             ja_bert,
             en_bert,
-            emo,
         ) in enumerate(eval_loader):
             x, x_lengths = x.cuda(), x_lengths.cuda()
             spec, spec_lengths = spec.cuda(), spec_lengths.cuda()
@@ -662,7 +660,6 @@ def evaluate(hps, generator, eval_loader, writer_eval):
             en_bert = en_bert.cuda()
             tone = tone.cuda()
             language = language.cuda()
-            emo = None if emo is None else emo.cuda()
             for use_sdp in [True, False]:
                 y_hat, attn, mask, *_ = generator.module.infer(
                     x,
@@ -673,7 +670,6 @@ def evaluate(hps, generator, eval_loader, writer_eval):
                     bert,
                     ja_bert,
                     en_bert,
-                    emo,
                     y=spec,
                     max_len=1000,
                     sdp_ratio=0.0 if not use_sdp else 1.0,

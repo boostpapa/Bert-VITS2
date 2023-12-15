@@ -42,40 +42,41 @@ def get_text(hps, text, language_str, device='cuda'):
         for i in range(len(word2ph)):
             word2ph[i] = word2ph[i] * 2
         word2ph[0] += 1
-    bert = get_bert(norm_text, word2ph, language_str, device)
+    bert_ori = get_bert(norm_text, word2ph, language_str, device)
     del word2ph
-    assert bert.shape[-1] == len(phone), phone
+    assert bert_ori.shape[-1] == len(phone), phone
 
+    bert = torch.zeros(1024, len(phone))
+    ja_bert = torch.zeros(1024, len(phone))
+    en_bert = torch.zeros(1024, len(phone))
     if language_str == "ZH":
-        bert = bert
-        ja_bert = torch.zeros(768, len(phone))
+        bert = bert_ori
     elif language_str == "JA":
-        ja_bert = bert
-        bert = torch.zeros(1024, len(phone))
-    else:
-        bert = torch.zeros(1024, len(phone))
-        ja_bert = torch.zeros(768, len(phone))
+        ja_bert = bert_ori
+    elif language_str == "EN":
+        en_bert = bert_ori
 
-    assert bert.shape[-1] == len(
+    assert bert_ori.shape[-1] == len(
         phone
     ), f"Bert seq len {bert.shape[-1]} != {len(phone)}"
 
     phone = torch.LongTensor(phone)
     tone = torch.LongTensor(tone)
     language = torch.LongTensor(language)
-    return bert, ja_bert, phone, tone, language
+    return bert, ja_bert, en_bert, phone, tone, language
 
 
 def infer(hps, text, sdp_ratio, noise_scale,
           noise_scale_w, length_scale, sid, language, device='cuda'):
     global net_g
-    bert, ja_bert, phones, tones, lang_ids = get_text(hps, text, language, device)
+    bert, ja_bert, en_bert, phones, tones, lang_ids = get_text(hps, text, language, device)
     with torch.no_grad():
         x_tst = phones.to(device).unsqueeze(0)
         tones = tones.to(device).unsqueeze(0)
         lang_ids = lang_ids.to(device).unsqueeze(0)
         bert = bert.to(device).unsqueeze(0)
         ja_bert = ja_bert.to(device).unsqueeze(0)
+        en_bert = en_bert.to(device).unsqueeze(0)
         x_tst_lengths = torch.LongTensor([phones.size(0)]).to(device)
         del phones
         speakers = torch.LongTensor([sid]).to(device)
@@ -88,6 +89,7 @@ def infer(hps, text, sdp_ratio, noise_scale,
                 lang_ids,
                 bert,
                 ja_bert,
+                en_bert,
                 sdp_ratio=sdp_ratio,
                 noise_scale=noise_scale,
                 noise_scale_w=noise_scale_w,
@@ -129,7 +131,17 @@ def main():
     device = torch.device('cuda' if use_cuda else 'cpu')
     hps = utils.get_hparams_from_file(args.config)
 
-    posterior_channels = hps.data.filter_length // 2 + 1
+    if (
+        "use_mel_posterior_encoder" in hps.model.keys()
+        and hps.model.use_mel_posterior_encoder is True
+    ):
+        print("Using mel posterior encoder for VITS2")
+        posterior_channels = 80  # vits2
+        hps.data.use_mel_posterior_encoder = True
+    else:
+        print("Using lin posterior encoder for VITS1")
+        posterior_channels = hps.data.filter_length // 2 + 1
+        hps.data.use_mel_posterior_encoder = False
 
     global net_g
     net_g = SynthesizerTrn(
@@ -146,22 +158,23 @@ def main():
     sdp_ratio = 0.2
     noise_scale = 0.667
     noise_scale_w = 0.8
-    length_scale = 1.1
+    length_scale = 1.0
     speaker_ids = hps.data.spk2id
     languages = ["ZH", "JP"]
     with open(args.test_file) as fin:
         for line in fin:
             arr = line.strip().split("|")
             audio_path = arr[0]
-            if len(arr) == 4:
+            if len(arr) >= 4:
                 sid = speaker_ids[arr[1]]
+                lang = arr[2]
                 text = arr[3]
 
             print(audio_path)
             st = time.time()
             audio = tts_fn(hps, text, sid=sid, sdp_ratio=sdp_ratio,
                            noise_scale=noise_scale, noise_scale_w=noise_scale_w,
-                           length_scale=length_scale, language=languages[0], device=device)
+                           length_scale=length_scale, language=lang, device=device)
 
             audio *= 32767 / max(0.01, np.max(np.abs(audio))) * 0.6
             print('RTF {}'.format(

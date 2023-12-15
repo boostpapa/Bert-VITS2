@@ -114,10 +114,16 @@ def preprocess(
         train_list += val_list[max_val_total:]
         val_list = val_list[:max_val_total]
 
+    traindir = os.path.dirname(train_path)
+    if not os.path.exists(traindir):
+        os.makedirs(traindir)  
     with open(train_path, "w", encoding="utf-8") as f:
         for line in train_list:
             f.write(line)
 
+    valdir = os.path.dirname(val_path)
+    if not os.path.exists(valdir):
+        os.makedirs(valdir)  
     with open(val_path, "w", encoding="utf-8") as f:
         for line in val_list:
             f.write(line)
@@ -132,6 +138,9 @@ def preprocess(
     json_config["data"]["validation_files"] = os.path.normpath(val_path).replace(
         "\\", "/"
     )
+    cfgdir = os.path.dirname(config_path)
+    if not os.path.exists(cfgdir):
+        os.makedirs(cfgdir)  
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(json_config, f, indent=2, ensure_ascii=False)
     print("训练集和验证集生成完成！")

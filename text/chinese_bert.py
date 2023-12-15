@@ -31,6 +31,10 @@ def get_bert_feature(text, word2ph, device="cuda"):
         res = torch.cat(res["hidden_states"][-3:-2], -1)[0].cpu()
 
     #assert len(word2ph) == len(text) + 2
+    #assert len(word2ph) == len(res)
+    if len(word2ph) != len(res):
+        return None
+
     word2phone = word2ph
     phone_level_feature = []
     for i in range(len(word2phone)):

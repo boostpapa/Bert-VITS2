@@ -40,8 +40,11 @@ def process_line(line):
         assert bert.shape[-1] == len(phone)
     except Exception:
         bert = get_bert(text, word2ph, language_str, device)
-        assert bert.shape[-1] == len(phone)
-        torch.save(bert, bert_path)
+        if bert is not None:
+            assert bert.shape[-1] == len(phone)
+            torch.save(bert, bert_path)
+        else:
+            print(f"{bert_path} bert input word lengths not equal word2ph")
 
 
 preprocess_text_config = config.preprocess_text_config

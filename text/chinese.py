@@ -165,13 +165,16 @@ def _g2p(segments):
     for seg in segments:
         # Replace all English words in the sentence
         #seg = re.sub("[a-zA-Z]+", "", seg)
-        seg_cut = psg.lcut(seg)
+        seg_cut = psg.lcut(seg, use_paddle=True, cut_all=True)
+        print(seg_cut)
         initials = []
         finals = []
         seg_cut = tone_modifier.pre_merge_for_modify(seg_cut)
+        print(seg_cut)
         seg_cut = split_cn_en(seg_cut)
+        print(seg_cut)
         for word, pos in seg_cut:
-            #print(word, pos)
+            print(word, pos)
             if word == " ":
                 continue
             if pos == "eng" or word.encode('utf-8').isalpha():
@@ -241,6 +244,7 @@ def _g2p(segments):
                     phone = pinyin_to_symbol_map[pinyin].split(" ")
                     word2ph.append(len(phone))
 
+                print(word2ph)
                 phones_list += phone
                 tones_list += [int(tone)] * len(phone)
     return phones_list, tones_list, word2ph
@@ -264,7 +268,7 @@ def get_bert_feature(text, word2ph):
 
 
 if __name__ == "__main__":
-    #from text.chinese_bert import get_bert_feature
+    from text.chinese_bert import get_bert_feature
 
     text = "可我 一问 ，这 玩意儿 并不 靠谱 。"
     text = "啊！但是《原神》是由,米哈\游自主，  [研发]的一款全.新开放世界.冒险游戏"
@@ -273,11 +277,16 @@ if __name__ == "__main__":
     text = "此次 重庆 打黑 审判 ，也已 进入 “扫尾” 阶段 。"
     text = "G P 是吧U显卡 RTX GPU 4080, 啊！但是《原神》是由,米哈\游自主，  … 猪头- !?[研发]的一款全.新开放世界.冒险游戏"
     text = "我是 善良 活泼 、好奇心 旺盛的 B型血 "
+    text = "扭一扭,舔一舔,泡一泡."
+    text = "富士通推出以人为本的aizinrai系统."
+    text = "服务员总体比较松散,butter喊了几次都没给我拿来."
+    text = "想想口水又来了,可以保留个 VIP 卡,可以打折哦!"
     text = text_normalize(text)
     print(text)
     phones, tones, word2ph = g2p(text)
     print(phones, tones, word2ph)
-    #bert = get_bert_feature(text, word2ph)
+    bert = get_bert_feature(text, word2ph)
+    print(bert.shape)
 
     #print(phones, tones, word2ph)
     #print(phones, tones, word2ph, bert.shape)

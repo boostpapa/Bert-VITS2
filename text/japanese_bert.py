@@ -3,7 +3,7 @@ import sys
 import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-from config import config
+#from config import config
 from text.japanese import text2sep_kata
 
 LOCAL_PATH = "./bert/deberta-v2-large-japanese-char-wwm"
@@ -13,8 +13,8 @@ tokenizer = AutoTokenizer.from_pretrained(LOCAL_PATH)
 
 models = dict()
 
-
-def get_bert_feature(text, word2ph, device=config.bert_gen_config.device):
+# device=config.bert_gen_config.device
+def get_bert_feature(text, word2ph, device="cuda"):
     text = "".join(text2sep_kata(text)[0])
     if (
         sys.platform == "darwin"
