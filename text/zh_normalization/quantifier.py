@@ -18,6 +18,7 @@ from .num import num2str
 # 温度表达式，温度会影响负号的读法
 # -3°C 零下三度
 RE_TEMPERATURE = re.compile(r'(-?)(\d+(\.\d+)?)(°C|℃|度|摄氏度)')
+RE_MEASURE = re.compile(r'[a-zA-Z0-9]+')
 measure_dict = {
     "cm2": "平方厘米",
     "cm²": "平方厘米",
@@ -56,8 +57,25 @@ def replace_temperature(match) -> str:
     return result
 
 
+'''
 def replace_measure(sentence) -> str:
     for q_notation in measure_dict:
         if q_notation in sentence:
             sentence = sentence.replace(q_notation, measure_dict[q_notation])
     return sentence
+'''
+
+
+def replace_measure(match) -> str:
+    """
+    Args:
+        match (re.Match)
+    Returns:
+        str
+    """
+    measure = match.group()
+    if measure in measure_dict:
+        result = measure_dict[measure] 
+    else:
+        result = measure 
+    return result

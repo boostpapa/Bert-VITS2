@@ -1,5 +1,6 @@
 import torch
 from multiprocessing import Pool
+from functools import partial
 import commons
 import utils
 from tqdm import tqdm
@@ -9,7 +10,7 @@ import torch.multiprocessing as mp
 from config import config
 
 
-def process_line(line):
+def process_line(hps, line):
     device = config.bert_gen_config.device
     if config.bert_gen_config.use_multi_device:
         rank = mp.current_process()._identity
@@ -26,25 +27,28 @@ def process_line(line):
     word2ph = [i for i in word2ph]
     phone, tone, language = cleaned_text_to_sequence(phone, tone, language_str)
 
-    phone = commons.intersperse(phone, 0)
-    tone = commons.intersperse(tone, 0)
-    language = commons.intersperse(language, 0)
-    for i in range(len(word2ph)):
-        word2ph[i] = word2ph[i] * 2
-    word2ph[0] += 1
+    if hps.data.add_blank:
+        phone = commons.intersperse(phone, 0)
+        tone = commons.intersperse(tone, 0)
+        language = commons.intersperse(language, 0)
+        for i in range(len(word2ph)):
+            word2ph[i] = word2ph[i] * 2
+        word2ph[0] += 1
 
     bert_path = wav_path.replace(".WAV", ".wav").replace(".wav", ".bert.pt")
 
+    '''
     try:
         bert = torch.load(bert_path)
         assert bert.shape[-1] == len(phone)
     except Exception:
-        bert = get_bert(text, word2ph, language_str, device)
-        if bert is not None:
-            assert bert.shape[-1] == len(phone)
-            torch.save(bert, bert_path)
-        else:
-            print(f"{bert_path} bert input word lengths not equal word2ph")
+    '''
+    bert = get_bert(text, word2ph, language_str, device)
+    if bert is not None:
+        assert bert.shape[-1] == len(phone)
+        torch.save(bert, bert_path)
+    else:
+        print(f"{bert_path} bert input word lengths not equal word2ph")
 
 
 preprocess_text_config = config.preprocess_text_config
@@ -69,7 +73,7 @@ if __name__ == "__main__":
     if len(lines) != 0:
         num_processes = args.num_processes
         with Pool(processes=num_processes) as pool:
-            for _ in tqdm(pool.imap_unordered(process_line, lines), total=len(lines)):
+            for _ in tqdm(pool.imap_unordered(partial(process_line, hps), lines), total=len(lines)):
                 pass
 
     print(f"bert生成完毕!, 共有{len(lines)}个bert.pt生成!")

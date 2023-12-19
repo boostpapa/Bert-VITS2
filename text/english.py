@@ -374,28 +374,36 @@ def text_normalize(text):
     return text
 
 
-def g2p_w(word):
+def g2p_w(word, tokens):
     phones = []
     tones = []
     word2ph = []
     if word.upper() in eng_dict:
         phns, tns = refine_syllables(eng_dict[word.upper()])
-        phones += phns
-        tones += tns
-        word2ph.append(len(phns))
+        phones = [post_replace_ph(i) for i in phns]
+        tones = tns
+        #word2ph.append(len(phns))
     else:
         phone_list = list(filter(lambda p: p != " ", _g2p(word)))
+        phns = []
+        tns = []
         for ph in phone_list:
             if ph in arpa:
                 ph, tn = refine_ph(ph)
-                phones.append(ph)
-                tones.append(tn)
+                phns.append(ph)
+                tns.append(tn)
             else:
-                phones.append(ph)
-                tones.append(0)
-        word2ph.append(len(phone_list))
+                phns.append(ph)
+                tns.append(0)
+        phones = [post_replace_ph(i) for i in phns]
+        tones = tns
+        # word2ph.append(len(phns))
 
-    phones = [post_replace_ph(i) for i in phones]
+    word2ph = distribute_phone(len(phones), len(tokens))
+
+    assert len(phones) == len(tones)
+    assert len(phones) == sum(word2ph)
+
     return phones, tones, word2ph
 
 

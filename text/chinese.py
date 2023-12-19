@@ -17,6 +17,13 @@ pinyin_to_symbol_map = {
 }
 an2cn_normalizer = TextNormalizer()
 
+from transformers import AutoTokenizer
+LOCAL_PATH = "/asrfs/users/wd007/asr/tools/src/opensource/bert-vits2-dev/bert/chinese-roberta-wwm-ext-large"
+tokenizer = AutoTokenizer.from_pretrained(LOCAL_PATH)
+
+EN_WORD_TG = '▁'
+#import jieba
+#jieba.add_word(EN_WORD_TG)
 import jieba.posseg as psg
 
 
@@ -56,7 +63,10 @@ rep_map = {
 
 tone_modifier = ToneSandhi()
 
+ENCHARS = 'abcdefghijklmnopqrstuvwxyz0123456789'
 
+
+'''
 def _clean_space(text):
   """"
   处理多余的空格
@@ -71,7 +81,23 @@ def _clean_space(text):
     new_i = i.strip()
     text = text.replace(i,new_i)
   return text
+'''
 
+
+def _clean_space(text):
+    """"
+    处理多余的空格
+    """
+
+    clean_text = ''
+    enden = False
+    strs = text.split()
+    for ss in strs:
+        sten = True if ss[0].lower() in ENCHARS else False
+        clean_text += ' '+ss if enden and sten else ss
+        enden = True if ss[-1].lower() in ENCHARS else False
+    return clean_text
+        
 
 def replace_punctuation(text):
     text = text.replace("嗯", "恩").replace("呣", "母")
@@ -146,6 +172,42 @@ def _split_cn_en(str):
     return output
 
 
+def _replace_enwords(str):
+    english = ENCHARS
+    words = []
+    word = ''
+    oss = ''
+    for s in str:
+        if s in english or s in english.upper(): 
+            word += s
+        else:
+            if word: 
+                words.append(word)
+                #oss = oss.strip() + ' #'
+                #oss = oss.strip() + ' ▁'
+                oss += EN_WORD_TG
+            word = ''
+            #s = s.strip()
+            oss += s
+    if word: 
+        words.append(word)
+        oss += EN_WORD_TG
+    return oss, words
+
+
+def _split_enwords(seg_cut):
+    segs = []
+    for seg in seg_cut:
+        if EN_WORD_TG not in seg[0]:
+            segs.append(seg)
+            continue
+        lsegs = re.split('(▁)', seg[0])
+        for s in lsegs:
+            if s != '':
+                segs.append([s, seg[1]])
+    return segs
+
+
 def split_cn_en(seg_cut):
     segs = []
     for seg in seg_cut:
@@ -165,23 +227,28 @@ def _g2p(segments):
     for seg in segments:
         # Replace all English words in the sentence
         #seg = re.sub("[a-zA-Z]+", "", seg)
-        seg_cut = psg.lcut(seg, use_paddle=True, cut_all=True)
-        print(seg_cut)
+        seg, enwords = _replace_enwords(seg)
+        #print(seg, enwords)
+        seg_cut = psg.lcut(seg, use_paddle=True)
+        #print(seg_cut)
         initials = []
         finals = []
         seg_cut = tone_modifier.pre_merge_for_modify(seg_cut)
-        print(seg_cut)
-        seg_cut = split_cn_en(seg_cut)
-        print(seg_cut)
+        #print(seg_cut)
+        seg_cut = _split_enwords(seg_cut)
+        #print(seg_cut)
+        k = 0
         for word, pos in seg_cut:
-            print(word, pos)
+            #print(word, pos)
             if word == " ":
                 continue
-            if pos == "eng" or word.encode('utf-8').isalpha():
-                phones_en, tones_en, word2ph_en = g2p_en_w(word)
+            if word == EN_WORD_TG:
+                tokens = tokenizer.tokenize(enwords[k])
+                phones_en, tones_en, word2ph_en = g2p_en_w(enwords[k], tokens)
                 phones_list += phones_en
                 tones_list += tones_en
                 word2ph += word2ph_en
+                k += 1
                 continue
 
             sub_initials, sub_finals = _get_initials_finals(word)
@@ -244,7 +311,7 @@ def _g2p(segments):
                     phone = pinyin_to_symbol_map[pinyin].split(" ")
                     word2ph.append(len(phone))
 
-                print(word2ph)
+                #print(word2ph)
                 phones_list += phone
                 tones_list += [int(tone)] * len(phone)
     return phones_list, tones_list, word2ph
@@ -279,8 +346,19 @@ if __name__ == "__main__":
     text = "我是 善良 活泼 、好奇心 旺盛的 B型血 "
     text = "扭一扭,舔一舔,泡一泡."
     text = "富士通推出以人为本的aizinrai系统."
-    text = "服务员总体比较松散,butter喊了几次都没给我拿来."
     text = "想想口水又来了,可以保留个 VIP 卡,可以打折哦!"
+    text = "服务员总体比较松散,butter喊了几次都没给我拿来."
+    text = "富士通推出以人为本的aizinrai butter VIP系统."
+    text = "富士通推出以人为本aizinrai的aizinrai butter VIP系统."
+    text = "大厅里 有 弹钢琴 ，当时 好像 唱的是 yesterday  once more 。…-"
+    text = "一个月期涨零点九一 BP 报百分之四点零三六一。"
+    text = "你真是太慷慨了.我觉得这样is ok"
+    text = "头发 齐齐地 挂到 耳根 ，走去时 旗袍 在 腰上 一皱 一皱 。"
+    text = "一大片一大片,就像潮水从我们身上涌过去."
+    text = "TA TA T"
+    text = "气球给你们，别抢我 switch"
+    text = "剩了 一些 茶卤儿 ，留着 过年吧 。年夜饭的 剩菜 干一干 可香啦 。"
+    print(text)
     text = text_normalize(text)
     print(text)
     phones, tones, word2ph = g2p(text)

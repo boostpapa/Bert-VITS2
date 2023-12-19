@@ -160,7 +160,7 @@ def main():
     noise_scale_w = 0.8
     length_scale = 1.0
     speaker_ids = hps.data.spk2id
-    languages = ["ZH", "JP"]
+    languages = ["ZH", "JP", "EN"]
     with open(args.test_file) as fin:
         for line in fin:
             arr = line.strip().split("|")
