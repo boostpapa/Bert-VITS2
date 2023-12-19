@@ -25,6 +25,17 @@ def intersperse(lst, item):
     return result
 
 
+def intersperse_word(lst, wdur, item):
+    s1 = 0
+    s2 = 1
+    result = [item] * (len(lst) + len(wdur) + 1)
+    for n in wdur:
+        result[s2:s2+n:1] = lst[s1:s1+n:1]
+        s1 += n
+        s2 += (n+1)
+    return result
+
+
 def kl_divergence(m_p, logs_p, m_q, logs_q):
     """KL(P||Q)"""
     kl = (logs_q - logs_p) - 0.5

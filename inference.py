@@ -35,7 +35,14 @@ def get_text(hps, text, language_str, device='cuda'):
     norm_text, phone, tone, word2ph = clean_text(text, language_str)
     phone, tone, language = cleaned_text_to_sequence(phone, tone, language_str)
 
-    if hps.data.add_blank:
+    if hps.add_word_blank:
+        phone = commons.intersperse_word(phone, word2ph, 0)
+        tone = commons.intersperse_word(tone, word2ph, 0)
+        language = commons.intersperse_word(language, word2ph, 0)
+        for i in range(len(word2ph)):
+            word2ph[i] = word2ph[i] + 1
+        word2ph[0] += 1
+    elif hps.data.add_blank:
         phone = commons.intersperse(phone, 0)
         tone = commons.intersperse(tone, 0)
         language = commons.intersperse(language, 0)
