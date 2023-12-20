@@ -44,7 +44,7 @@ class TextAudioSpeakerLoader(torch.utils.data.Dataset):
         self.cleaned_text = getattr(hparams, "cleaned_text", False)
 
         self.add_blank = hparams.add_blank
-        self.add_word_blank = hparams.add_word_blank
+        self.add_word_blank = getattr(hparams, "add_word_blank", False)
         self.min_text_len = getattr(hparams, "min_text_len", 1)
         self.max_text_len = getattr(hparams, "max_text_len", 384)
 
@@ -89,6 +89,7 @@ class TextAudioSpeakerLoader(torch.utils.data.Dataset):
     def get_audio_text_speaker_pair(self, audiopath_sid_text):
         # separate filename, speaker_id and text
         audiopath, sid, language, text, phones, tone, word2ph = audiopath_sid_text
+        #logger.warning(f"audiopath_sid_text--wav_path:{audiopath}, phone: {phones}, word2ph: {word2ph}")
 
         bert, ja_bert, en_bert, phones, tone, language = self.get_text(
             text, word2ph, phones, tone, language, audiopath
@@ -150,26 +151,33 @@ class TextAudioSpeakerLoader(torch.utils.data.Dataset):
 
     def get_text(self, text, word2ph, phone, tone, language_str, wav_path):
         phone, tone, language = cleaned_text_to_sequence(phone, tone, language_str)
+        #logger.warning(f"wav_path:{wav_path}, phone: {phone}, word2ph: {word2ph}")
         if self.add_word_blank:
             phone = commons.intersperse_word(phone, word2ph, 0)
             tone = commons.intersperse_word(tone, word2ph, 0)
             language = commons.intersperse_word(language, word2ph, 0)
+            '''
             for i in range(len(word2ph)):
                 word2ph[i] = word2ph[i] + 1
             word2ph[0] += 1
+            logger.warning(f"wav_path:{wav_path}, phone: {phone}, word2ph: {word2ph}")
+            '''
         elif self.add_blank:
             phone = commons.intersperse(phone, 0)
             tone = commons.intersperse(tone, 0)
             language = commons.intersperse(language, 0)
+            '''
             for i in range(len(word2ph)):
                 word2ph[i] = word2ph[i] * 2
             word2ph[0] += 1
+            '''
         bert_path = wav_path.replace(".wav", ".bert.pt")
         try:
             bert_ori = torch.load(bert_path)
             assert bert_ori.shape[-1] == len(phone)
         except Exception as e:
-            logger.warning("Bert load Failed")
+            logger.warning(f"Bert load Failed bert shape[-1]:{bert_ori.shape[-1]}, phone len: {len(phone)}")
+            logger.warning(f"wav_path:{wav_path}, phone: {phone}, word2ph: {word2ph}")
             logger.warning(e)
 
         if language_str == "ZH":

@@ -27,7 +27,7 @@ def process_line(hps, line):
     word2ph = [i for i in word2ph]
     phone, tone, language = cleaned_text_to_sequence(phone, tone, language_str)
 
-    if hps.add_word_blank:
+    if hasattr(hps.data, "add_word_blank") and hps.data.add_word_blank:
         phone = commons.intersperse_word(phone, word2ph, 0)
         for i in range(len(word2ph)):
             word2ph[i] = word2ph[i] + 1
