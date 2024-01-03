@@ -11,6 +11,7 @@ import torch
 import argparse
 import commons
 import utils
+import re
 from models import SynthesizerTrn
 from text.symbols import symbols
 from text import cleaned_text_to_sequence, get_bert
@@ -112,19 +113,29 @@ def infer(hps, text, sdp_ratio, noise_scale,
 
 def tts_fn(hps, text, sid, sdp_ratio, noise_scale,
            noise_scale_w, length_scale, language, device='cuda'):
+    punctuation = ["!", "?", "…", ".", ";", "！", "？","...", "。", "；"]
+    pattern = r"(?<=[{0}])\s*".format("".join(punctuation))
+    sentences = [i for i in re.split(pattern, text) if i.strip() != ""]
+    print(sentences)
+   
+    audios = []
     with torch.no_grad():
-        audio = infer(
-            hps,
-            text=text,
-            sdp_ratio=sdp_ratio,
-            noise_scale=noise_scale,
-            noise_scale_w=noise_scale_w,
-            length_scale=length_scale,
-            sid=sid,
-            language=language,
-            device=device,
-        )
+        for sen in sentences:
+            audio = infer(
+                hps,
+                text=sen,
+                sdp_ratio=sdp_ratio,
+                noise_scale=noise_scale,
+                noise_scale_w=noise_scale_w,
+                length_scale=length_scale,
+                sid=sid,
+                language=language,
+                device=device,
+            )
+            audios.append(audio)
+            audios.append([0]*4800)
         torch.cuda.empty_cache()
+    audio = np.concatenate(audios, axis=0)
     return audio
 
 
@@ -161,6 +172,8 @@ def main():
 
     net_g.eval()
     utils.load_checkpoint(args.checkpoint, net_g, None, skip_optimizer=True)
+    if not os.path.exists(args.outdir):
+        os.makedirs(args.outdir)  
 
     sdp_ratio = 0.2
     noise_scale = 0.667

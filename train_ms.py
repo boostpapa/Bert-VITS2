@@ -11,6 +11,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.cuda.amp import autocast, GradScaler
 from tqdm import tqdm
 import logging
+import math
 from config import config
 import argparse
 import datetime
@@ -31,6 +32,8 @@ from models import (
 from losses import generator_loss, discriminator_loss, feature_loss, kl_loss
 from mel_processing import mel_spectrogram_torch, spec_to_mel_torch
 from text.symbols import symbols
+from pytorch_msssim import ssim as ssim1
+from ssim import ssim
 
 '''
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -380,6 +383,15 @@ def train_and_evaluate(
     train_loader, eval_loader = loaders
     if writers is not None:
         writer, writer_eval = writers
+    grad_clip = None
+    if hasattr(hps.train, "grad_clip"):
+        grad_clip = None if hps.train.grad_clip <= 0 else hps.train.grad_clip
+    c_ssim_mel = 0.0
+    if hasattr(hps.train, "c_ssim_mel"):
+        c_ssim_mel = hps.train.c_ssim_mel
+        assert c_ssim_mel >= 0
+        #print(f"Using ssim mel loss c_ssim_mel: {c_ssim_mel}")
+        
 
     train_loader.batch_sampler.set_epoch(epoch)
     global global_step
@@ -502,13 +514,13 @@ def train_and_evaluate(
                 optim_dur_disc.zero_grad()
                 scaler.scale(loss_dur_disc_all).backward()
                 scaler.unscale_(optim_dur_disc)
-                commons.clip_grad_value_(net_dur_disc.parameters(), None)
+                commons.clip_grad_value_(net_dur_disc.parameters(), grad_clip)
                 scaler.step(optim_dur_disc)
 
         optim_d.zero_grad()
         scaler.scale(loss_disc_all).backward()
         scaler.unscale_(optim_d)
-        grad_norm_d = commons.clip_grad_value_(net_d.parameters(), None)
+        grad_norm_d = commons.clip_grad_value_(net_d.parameters(), grad_clip)
         scaler.step(optim_d)
 
         with autocast(enabled=hps.train.fp16_run):
@@ -517,8 +529,14 @@ def train_and_evaluate(
             if net_dur_disc is not None:
                 y_dur_hat_r, y_dur_hat_g = net_dur_disc(hidden_x, x_mask, logw, logw_)
             with autocast(enabled=False):
-                loss_dur = torch.sum(l_length.float())
+                loss_dur = torch.sum(l_length.float()) 
                 loss_mel = F.l1_loss(y_mel, y_hat_mel) * hps.train.c_mel
+                loss_ssim_mel = torch.zeros(size = (1,)).cuda()
+                if c_ssim_mel > 0:
+                    y_mel1 = y_mel.unsqueeze(1)
+                    y_hat_mel1 = y_hat_mel.unsqueeze(1)
+                    #loss_mel_ssim = ssim_mel * (1 - ssim1(y_mel1, y_hat_mel1, data_range = 1.0, nonnegative_ssim = True)) * hps.train.c_mel
+                    loss_ssim_mel = (1 - ssim(y_mel1, y_hat_mel1)) * c_ssim_mel
                 loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask) * hps.train.c_kl
 
                 loss_fm = feature_loss(fmap_r, fmap_g)
@@ -526,20 +544,22 @@ def train_and_evaluate(
                 loss_gen_all = (
                     loss_gen + loss_fm + loss_mel + loss_dur + loss_kl
                 )
+                if c_ssim_mel > 0:
+                    loss_gen_all += loss_ssim_mel
                 if net_dur_disc is not None:
                     loss_dur_gen, losses_dur_gen = generator_loss(y_dur_hat_g)
                     loss_gen_all += loss_dur_gen
         optim_g.zero_grad()
         scaler.scale(loss_gen_all).backward()
         scaler.unscale_(optim_g)
-        grad_norm_g = commons.clip_grad_value_(net_g.parameters(), None)
+        grad_norm_g = commons.clip_grad_value_(net_g.parameters(), grad_clip)
         scaler.step(optim_g)
         scaler.update()
 
         if rank == 0:
             if global_step % hps.train.log_interval == 0:
                 lr = optim_g.param_groups[0]["lr"]
-                losses = [loss_disc, loss_gen, loss_fm, loss_mel, loss_dur, loss_kl]
+                losses = [loss_disc, loss_dur_disc, loss_gen, loss_fm, loss_mel, loss_ssim_mel, loss_dur, loss_kl]
                 logger.info(
                     "Train Epoch: {} [{:.0f}%]".format(
                         epoch, 100.0 * batch_idx / len(train_loader)
