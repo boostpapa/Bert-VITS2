@@ -133,7 +133,7 @@ def tts_fn(hps, text, sid, sdp_ratio, noise_scale,
                 device=device,
             )
             audios.append(audio)
-            audios.append([0]*4800)
+            #audios.append([0]*3600)
         torch.cuda.empty_cache()
     audio = np.concatenate(audios, axis=0)
     return audio
