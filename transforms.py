@@ -168,6 +168,7 @@ def rational_quadratic_spline(
         c = -input_delta * (inputs - input_cumheights)
 
         discriminant = b.pow(2) - 4 * a * c
+        discriminant = torch.relu(discriminant)
         assert (discriminant >= 0).all()
 
         root = (2 * c) / (-b - torch.sqrt(discriminant))
