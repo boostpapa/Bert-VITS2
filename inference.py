@@ -175,9 +175,9 @@ def main():
     if not os.path.exists(args.outdir):
         os.makedirs(args.outdir)  
 
-    sdp_ratio = 0.2
+    sdp_ratio = 0.5
     noise_scale = 0.667
-    noise_scale_w = 0.8
+    noise_scale_w = 0.9
     length_scale = 1.0
     speaker_ids = hps.data.spk2id
     languages = ["ZH", "JP", "EN"]
