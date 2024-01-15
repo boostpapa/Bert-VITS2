@@ -192,6 +192,8 @@ def run():
             0.1,
             gin_channels=hps.model.gin_channels if hps.data.n_speakers != 0 else 0,
         ).cuda(local_rank)
+    else:
+        net_dur_disc = None
     if (
         "use_spk_conditioned_encoder" in hps.model.keys()
         and hps.model.use_spk_conditioned_encoder is True
@@ -447,6 +449,7 @@ def train_and_evaluate(
                 z_mask,
                 (z, z_p, m_p, logs_p, m_q, logs_q),
                 (hidden_x, logw, logw_),
+                g,
             ) = net_g(
                 x,
                 x_lengths,
@@ -501,7 +504,11 @@ def train_and_evaluate(
                 loss_disc_all = loss_disc
             if net_dur_disc is not None:
                 y_dur_hat_r, y_dur_hat_g = net_dur_disc(
-                    hidden_x.detach(), x_mask.detach(), logw.detach(), logw_.detach()
+                    hidden_x.detach(),
+                    x_mask.detach(),
+                    logw.detach(),
+                    logw_.detach(),
+                    g.detach(),
                 )
                 with autocast(enabled=False):
                     # TODO: I think need to mean using the mask, but for now, just mean all
@@ -514,7 +521,7 @@ def train_and_evaluate(
                 optim_dur_disc.zero_grad()
                 scaler.scale(loss_dur_disc_all).backward()
                 scaler.unscale_(optim_dur_disc)
-                commons.clip_grad_value_(net_dur_disc.parameters(), grad_clip)
+                grad_norm_dur = commons.clip_grad_value_(net_dur_disc.parameters(), grad_clip)
                 scaler.step(optim_dur_disc)
 
         optim_d.zero_grad()
@@ -527,9 +534,10 @@ def train_and_evaluate(
             # Generator
             y_d_hat_r, y_d_hat_g, fmap_r, fmap_g = net_d(y, y_hat)
             if net_dur_disc is not None:
-                y_dur_hat_r, y_dur_hat_g = net_dur_disc(hidden_x, x_mask, logw, logw_)
+                #y_dur_hat_r, y_dur_hat_g = net_dur_disc(hidden_x, x_mask, logw_, logw)
+                y_dur_hat_r, y_dur_hat_g = net_dur_disc(hidden_x, x_mask, logw, logw_, g)
             with autocast(enabled=False):
-                loss_dur = torch.sum(l_length.float()) 
+                loss_dur = torch.sum(l_length.float())
                 loss_mel = F.l1_loss(y_mel, y_hat_mel) * hps.train.c_mel
                 loss_ssim_mel = torch.zeros(size = (1,)).cuda()
                 if c_ssim_mel > 0:
@@ -573,6 +581,7 @@ def train_and_evaluate(
                     "learning_rate": lr,
                     "grad_norm_d": grad_norm_d,
                     "grad_norm_g": grad_norm_g,
+                    "grad_norm_dur": grad_norm_dur,
                 }
                 scalar_dict.update(
                     {
@@ -591,6 +600,30 @@ def train_and_evaluate(
                 scalar_dict.update(
                     {"loss/d_g/{}".format(i): v for i, v in enumerate(losses_disc_g)}
                 )
+
+                if net_dur_disc is not None:
+                    scalar_dict.update({"loss/dur_disc/total": loss_dur_disc_all})
+
+                    scalar_dict.update(
+                        {
+                            "loss/dur_disc_g/{}".format(i): v
+                            for i, v in enumerate(losses_dur_disc_g)
+                        }
+                    )
+                    scalar_dict.update(
+                        {
+                            "loss/dur_disc_r/{}".format(i): v
+                            for i, v in enumerate(losses_dur_disc_r)
+                        }
+                    )
+
+                    scalar_dict.update({"loss/g/dur_gen": loss_dur_gen})
+                    scalar_dict.update(
+                        {
+                            "loss/g/dur_gen_{}".format(i): v
+                            for i, v in enumerate(losses_dur_gen)
+                        }
+                    )
 
                 image_dict = {
                     "slice/mel_org": utils.plot_spectrogram_to_numpy(
