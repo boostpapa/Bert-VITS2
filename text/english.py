@@ -217,6 +217,8 @@ def refine_ph(phn):
     if re.search(r"\d$", phn):
         tone = int(phn[-1]) + 1
         phn = phn[:-1]
+    else:
+        tone = 3
     return phn.lower(), tone
 
 
